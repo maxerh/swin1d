@@ -1,0 +1,1 @@
+setting,dataset,entity,seq_len,embed_dim,TP,TN,FP,FN,threshold,precision,recall,f1,ROC/AUC

@@ -1,0 +1,44 @@
+data:
+  bs: 20
+  mode: anomalydetection
+  prefetch_buffer: 200
+  preprocessing: None
+  seq_stride: 25
+  show_statistics: false
+  shuffle_buffer: 200
+model:
+  attn_drop_rate: 0.0
+  condition_type: None
+  conditionargs: None
+  conditiontype: None
+  depths:
+  - 2
+  - 2
+  - 2
+  - 1
+  dim_mults:
+  - 1
+  - 2
+  - 4
+  - 8
+  drop_path_rate: 0.0
+  drop_rate: 0.0
+  embed_dim: 512
+  mlp_ratio: 5
+  noise_steps: 0
+  num_heads:
+  - 4
+  - 8
+  - 8
+  - 16
+  patchsize: 4
+  subtype: None
+  type: swin_unet
+  use_ape: false
+  use_shortcut: true
+  window_size: 64
+training:
+  loss_lambda: 1
+  lr: 0.0001
+  n_epochs: 10
+  optimizer: Adam
