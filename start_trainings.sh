@@ -1,4 +1,4 @@
-!/bin/bash -x
+#!/bin/bash -x
 datasets="SMD PSM WADI SWaT"
 lengths=( 64 128 256 512 1024 )
 for d in $datasets

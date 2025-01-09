@@ -387,7 +387,7 @@ class SwinTransformerBlock(nn.Module):
 
 
 class BasicLayer_up(nn.Module):
-    """ A basic Swin Transformer layer for one stage, including upsampüling.
+    """ A basic Swin Transformer layer for one stage, including upsampling.
 
     Args:
         dim (int): Number of input channels.
@@ -648,8 +648,7 @@ class SwinV2_Unet(nn.Module):
         for idx, block in enumerate(self.downs):
             skip, x = block(x, t)
             h.append(skip)
-        #h.pop()
-        # x shape: 12, 32, 1024
+
         for idx, block in enumerate(self.ups):
             if idx != 0:
                 x = torch.cat((x, h.pop()), dim=-1)

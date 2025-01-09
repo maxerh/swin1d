@@ -4,7 +4,7 @@
 
 # Swin1D-AD
 
-This repository supplements our paper "A Scalable Transformer Network for Multivariate Time Series Anomaly Detection in Industrial Environments".
+This repository supplements our paper "Rethinking Time Series Anomaly Detection: A Scalable Transformer-Based Framework for Large Contexts".
 
 ## Installation
 

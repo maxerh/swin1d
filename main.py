@@ -60,7 +60,7 @@ def get_data_dim(dataset):
     elif dataset == 'WADI':
         return 127
     else:
-        raise ValueError('unknown dataset '+str(dataset))
+        raise ValueError('unknown dataset ' + str(dataset))
 
 
 def main_train_eval(mode, config_number, config, device):
@@ -88,7 +88,7 @@ def main_train_eval(mode, config_number, config, device):
         printokblue(f"-> creating evaluation module")
         trainer = mdltrainer(config, config_number, model, None, device)
         printokblue(f"-> start evaluation")
-        checkpoints_path = (f"{config['dirs']['checkpoints']}/{config['data']['entity']}_checkpoint.pt")
+        checkpoints_path = f"{config['dirs']['checkpoints']}/{config['data']['entity']}_checkpoint.pt"
         trainer.eval(checkpoints_path)
 
 
