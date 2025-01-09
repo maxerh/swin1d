@@ -295,6 +295,7 @@ def get_loader_segment(data_path, batch_size, win_size=100, step=1, mode='train'
         val_start_index = random.randrange(train_use_len)
         indices = torch.arange(dataset_len)
         train_sub_indices = torch.cat([indices[:val_start_index], indices[val_start_index+val_use_len:]])
+        train_subset = Subset(dataset, train_sub_indices)
         train_loader = DataLoader(dataset=train_subset, batch_size=batch_size, shuffle=shuffle, drop_last=True, num_workers=0)
         return train_loader
 
