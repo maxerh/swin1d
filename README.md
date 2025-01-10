@@ -26,6 +26,8 @@ wget https://s3-us-west-2.amazonaws.com/telemanom/data.zip && unzip data.zip && 
 cd data && wget https://raw.githubusercontent.com/khundman/telemanom/master/labeled_anomalies.csv
 ```
 
+We converted the datasets to .pkl-files if necessary. 
+
 ## Training
 
 The track different trainings with tensorboard and mlflow.
