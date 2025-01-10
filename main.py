@@ -99,6 +99,9 @@ def main(args):
         device = torch.device("cpu")
     config_number = str(args.setting)
     config = load_config(config_number)
+    config["data"]["dataset"] = args.dataset
+    config["data"]["seq_len"] = args.seq_len
+    config["model"]["type"] = args.model
     if config["data"]["dataset"] == "SMD":
         data_set_number = []
         data_set_number += ["1-1", "1-2", "1-3", "1-4", "1-5", "1-6", "1-7", "1-8"]
@@ -128,15 +131,27 @@ def main(args):
 
 if __name__ == '__main__':
     parser = ArgumentParser()
-    parser.add_argument("-s", "--setting",
+    parser.add_argument("--setting",
                         help="settings file number (str)",
                         default="0001",
                         type=str)
-    parser.add_argument("-g", "--gpu",
+    parser.add_argument("--dataset",
+                        help="dataset name [SMD, SMAP, MSL, PSM, SWaT, WADI]",
+                        default="SMD",
+                        type=str)
+    parser.add_argument("--seq_len",
+                        help="sequence length (int) [64,128,256,512,1024]",
+                        default=1024,
+                        type=int)
+    parser.add_argument("--model",
+                        help="model name (str)",
+                        default="swin_unet",
+                        type=str)
+    parser.add_argument("--gpu",
                         help="gpu to use (int)",
                         default=0)
-    parser.add_argument("-m", "--mode",
-                        help="what to do [train, eval]",
+    parser.add_argument("--mode",
+                        help="what to do [download, train, infer, display, eval, compare]",
                         default="train",
                         type=str)
     args = parser.parse_args()
