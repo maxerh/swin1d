@@ -1,15 +1,10 @@
 import math
 import torch
-import numpy as np
 from torch import nn
-from torch.nn.functional import dropout
 from torch.nn.init import trunc_normal_
 import torch.nn.functional as F
-#from einops.layers.torch import Rearrange
 from einops import rearrange
-from models.model_blocks import ResnetBlock, SinusoidalPosEmb, Upsample, Downsample, LinearAttention, Attention
-from models.model_helpers import exists, default
-import utils.helpers as h
+from models.model_helpers import default
 from models.pos_embeddings import get_positional_embed
 
 """
@@ -103,31 +98,6 @@ class DataEmbedding(nn.Module):
         x = self.value_embedding(x) + self.position_embedding(x)
         return self.dropout(x)
 
-class PatchEmbed(nn.Module):
-    def __init__(self, signal_length, patch_size, in_chans, embed_dim, norm_layer=None):
-        super().__init__()
-        self.signal_length = signal_length
-        self.patch_size = patch_size
-
-        self.in_chans = in_chans
-        self.embed_dim = embed_dim
-        # embedding into non-overlapping windows: stride = patch_size
-        # embedding into overlapping windows: stride = patch_size//2
-        #self.proj = nn.Conv1d(in_chans, embed_dim, kernel_size=self.patch_size, stride=self.patch_size)
-        self.proj = nn.Conv1d(in_chans, embed_dim, kernel_size=3, padding=1, padding_mode='circular')
-        if norm_layer is not None:
-            self.norm = norm_layer(embed_dim)
-        else:
-            self.norm = None
-
-    def forward(self, x):
-        b, c, s_w = x.shape
-        assert s_w == self.signal_length, \
-            f"Input signal size ({s_w}) doesn't match model ({self.signal_length})."
-        x = self.proj(x).transpose(1, 2)  # b s_w c
-        if self.norm is not None:
-            x = self.norm(x)
-        return x
 
 
 class PatchMerging(nn.Module):
@@ -193,7 +163,6 @@ class PatchExpand(nn.Module):
         x = x.view(B, -1, C//2)
         x = self.norm(x)
         return x
-
 
 
 
@@ -396,18 +365,16 @@ class BasicLayer_up(nn.Module):
         num_heads (int): Number of attention heads.
         window_size (int): Local window size.
         mlp_ratio (float): Ratio of mlp hidden dim to embedding dim.
-        drop_path (float | tuple[float], optional): Stochastic depth rate. Default: 0.0
-        norm_layer (nn.Module, optional): Normalization layer. Default: nn.LayerNorm
+        drop_rate (float | tuple[float], optional): dropout rate. Default: 0.0
         upsample (nn.Module | None, optional): Downsample layer at the end of the layer. Default: None
     """
 
     def __init__(self, dim, dim_key, input_resolution, depth, num_heads, window_size,
-                 mlp_ratio=4., drop_rate=0., upsample=None, time_emb_dim=False):
+                 mlp_ratio=4., drop_rate=0., upsample=None):
         super().__init__()
         self.dim = dim
         self.input_resolution = input_resolution
         self.depth = depth
-        self.time_emb_dim = time_emb_dim
 
         shift_size = window_size // 2
         # build blocks
@@ -424,28 +391,14 @@ class BasicLayer_up(nn.Module):
         # patch merging layer
         if upsample is not None:
             self.upsample = upsample(dim, input_resolution)
-            self.mlp = nn.Sequential(
-                nn.SiLU(),
-                nn.Linear(time_emb_dim, 2 * self.input_resolution)
-            ) if exists(time_emb_dim) else None
         else:
             self.upsample = None
 
-    def forward(self, x, time_emb):
+    def forward(self, x):
         for blk in self.blocks:
             x = blk(x)
         if self.upsample is not None:
-            scale_shift = None
-            if exists(self.mlp) and exists(time_emb):
-                time_emb = self.mlp(time_emb)
-                #time_emb = time_emb.view(-1, 1, self.dim//2)
-                time_emb = time_emb.reshape([-1, 2 * self.input_resolution, 1])
-                scale_shift = time_emb.chunk(2, dim=1)
-            if exists(scale_shift):
-                scale, shift = scale_shift
-                x = x * (scale + 1) + shift
             x = self.upsample(x)
-
         return x
 
 
@@ -459,23 +412,16 @@ class BasicLayer(nn.Module):
         num_heads (int): Number of attention heads.
         window_size (int): Local window size.
         mlp_ratio (float): Ratio of mlp hidden dim to embedding dim.
-        qkv_bias (bool, optional): If True, add a learnable bias to query, key, value. Default: True
-        drop (float, optional): Dropout rate. Default: 0.0
-        attn_drop (float, optional): Attention dropout rate. Default: 0.0
-        drop_path (float | tuple[float], optional): Stochastic depth rate. Default: 0.0
-        norm_layer (nn.Module, optional): Normalization layer. Default: nn.LayerNorm
+        drop_rate (float, optional): Dropout rate. Default: 0.0
         downsample (nn.Module | None, optional): Downsample layer at the end of the layer. Default: None
-        use_checkpoint (bool): Whether to use checkpointing to save memory. Default: False.
-        pretrained_window_size (int): Local window size in pre-training.
     """
 
     def __init__(self, dim, dim_key, input_resolution, depth, num_heads, window_size,
-                 mlp_ratio=4., drop_rate=0., downsample=None, time_emb_dim=False):
+                 mlp_ratio=4., drop_rate=0., downsample=None):
         super().__init__()
         self.dim = dim
         self.input_resolution = input_resolution
         self.depth = depth
-        self.time_emb_dim = time_emb_dim
 
         shift_size = window_size // 2
         # build blocks
@@ -492,27 +438,14 @@ class BasicLayer(nn.Module):
         # patch merging layer
         if downsample is not None:
             self.downsample = downsample(dim, input_resolution)
-            self.mlp = nn.Sequential(
-                nn.SiLU(),
-                nn.Linear(time_emb_dim, 2 * self.input_resolution)
-            ) if exists(time_emb_dim) else None
         else:
             self.downsample = None
 
-    def forward(self, x, time_emb):
+    def forward(self, x):
         for blk in self.blocks:
             x = blk(x)  # STB
         if self.downsample is not None:
-            down = x
-            scale_shift = None
-            if exists(self.mlp) and exists(time_emb):
-                time_emb = self.mlp(time_emb)
-                time_emb = time_emb.reshape([-1, 2 * self.input_resolution, 1])
-                scale_shift = time_emb.chunk(2, dim=1)
-            if exists(scale_shift):
-                scale, shift = scale_shift
-                down = down * (scale + 1) + shift
-            down = self.downsample(down)
+            down = self.downsample(x)
         else:
             down = x
         return x, down  # x=skip
@@ -520,14 +453,12 @@ class BasicLayer(nn.Module):
 
 class SwinV2_Unet(nn.Module):
     """
-    https://github.com/HuCaoFighting/Swin-Unet/blob/46ed94d9ec114feb0fb207a7a6ca327c88742369/networks/swin_transformer_unet_skip_expand_decoder_sys.py#L333
     # # Model # #
-    # 1. split signal into patches
-    # 2. apply positional encoding
-    # 3. STB   -> Basic layer -> STB
-    # 4. Patch Merging + STB
-    # 5. last conv in deep feature extraction
-    # 6. reconstruct signal
+    # -> original signal
+    # 1. Data embedding
+    # 2. U-Net with STB-blocks
+    # 3. projection layer
+    # -> reconstructed signal
     """
     def __init__(self, config, in_channels, device, additional_in_channels=0):
         super(SwinV2_Unet, self).__init__()
@@ -540,27 +471,15 @@ class SwinV2_Unet(nn.Module):
         self.dim_mults = config['model']['dim_mults']       # dimension multiplikators
         self.patch_size = config['model']['patchsize']
         self.mlp_ratio = config['model']['mlp_ratio']
-        # self.window_size = config['model']['window_size']
         self.window_size = min(config['model']['window_size'], config['data']['seq_len']//(2**(len(self.depths)-1)))
         self.device = device
-        dim_key = 64        # TODO
+        dim_key = 64
 
         drop_path_rate = config['model']['drop_path_rate']
 
         # drop path rate for each layer
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(self.depths))]
-        norm_layer = nn.LayerNorm
 
-        # time embeddings
-        sinusoidal_pos_emb_theta = 10000
-        time_dim = self.embed_dim * 4
-        sinu_pos_emb = SinusoidalPosEmb(self.embed_dim, theta=sinusoidal_pos_emb_theta)
-        self.time_mlp = nn.Sequential(
-            sinu_pos_emb,
-            nn.Linear(self.embed_dim, time_dim),
-            nn.GELU(),
-            nn.Linear(time_dim, time_dim)
-        )
 
         # patch embedding
         self.patch_embed = DataEmbedding(self.channels+additional_in_channels, self.embed_dim)
@@ -576,20 +495,16 @@ class SwinV2_Unet(nn.Module):
         for ind, (dim, depth, n_head) in enumerate(zip(dims_down, self.depths, self.num_heads)):
             if ind == len(self.dim_mults)-1:
                 continue
-            #is_last = ind >= (num_resolutions - 1)
             input_resolution = patches_resolution // (2 ** ind)
-            #dim = int(self.embed_dim * 2 ** ind)
             self.downs.append(BasicLayer(dim, dim_key, input_resolution,
                                          depth=depth,
                                          num_heads=n_head,
                                          window_size=self.window_size,
                                          mlp_ratio=self.mlp_ratio,
                                          downsample=PatchMerging,
-                                         time_emb_dim=time_dim,
                                          drop_rate=dpr[sum(self.depths[:ind])],
                                          )
                               )
-            #                             downsample=Downsample if is_last else None,))
 
 
         self.ups = nn.ModuleList([])
@@ -605,13 +520,11 @@ class SwinV2_Unet(nn.Module):
                                           window_size=self.window_size,
                                           mlp_ratio=self.mlp_ratio,
                                           upsample=PatchExpand if not is_last else None,
-                                          time_emb_dim=time_dim,
                                           drop_rate=dpr[sum(self.depths[:(num_resolutions - 1 - ind)])],
                                      )
                           )
 
-        #self.final_up = FinalPatchExpand(self.embed_dim, input_resolution=self.signal_length//self.patch_size)
-        self.output = nn.Conv1d(self.embed_dim, self.channels, kernel_size=1, bias=False) # TODO: bias erlauben??
+        self.output = nn.Conv1d(self.embed_dim, self.channels, kernel_size=1, bias=False)
 
 
     @property
@@ -621,43 +534,22 @@ class SwinV2_Unet(nn.Module):
     def forward(self, x, time=None, self_condition=None, condition=None):
         assert all([d % self.downsample_factor == 0 for d in
                     x.shape[-1:]]), f'input dimensions {x.shape[-1:]} need to be divisible by {self.downsample_factor}.'
-        if exists(self_condition):
-            assert self_condition.shape[2:] == x.shape[2:], \
-                f'self_cond has the shape {self_condition.shape} which is not compatible with the input shape {x.shape}.'
-            if condition is None:
-                x = torch.cat((self_condition, x), dim=1)
-            else:
-                assert condition.shape[2:] == x.shape[
-                                              2:], f'condition has the shape {condition.shape} which is not compatible with the required shape {x.shape}.'
-                x = torch.cat((condition, self_condition, x), dim=1)
-        elif exists(condition):
-            assert condition.shape[2:] == x.shape[
-                                          2:], f'condition has the shape {condition.shape} which is not compatible with the required shape {x.shape}.'
-            x = torch.cat((condition, x), dim=1)
 
-        #x = self.patch_embed(x)     # b, s_w/patch_size, embed_dim  24,32,128
-        #r = x.clone()
+
         x = x.transpose(1,2)    # B, C, s_w -> B, s_w, C
         x = self.patch_embed(x)
-        #x = x.transpose(1, 2)
-        if exists(time):
-            t = self.time_mlp(time)
-        else:
-            t = None
+
         h = []  # skip connections
         for idx, block in enumerate(self.downs):
-            skip, x = block(x, t)
+            skip, x = block(x)
             h.append(skip)
 
         for idx, block in enumerate(self.ups):
             if idx != 0:
                 x = torch.cat((x, h.pop()), dim=-1)
                 x = self.concat_back_dim[idx-1](x)
-            x = block(x, t)
+            x = block(x)
 
-
-        #x = torch.cat((x, r), dim=-1)
-        #x = self.final_up(x)
         x = x.view(x.shape[0], self.signal_length, -1)
         x = x.permute(0, 2, 1)  # B,C,s_w
         x = self.output(x)

@@ -1,6 +1,6 @@
 import math
 import torch
-from models.model_blocks import exists
+from models.model_helpers import exists
 
 def get_positional_features_exponential(
     positions, features, seq_len, min_half_life=3.0
